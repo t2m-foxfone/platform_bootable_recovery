@@ -7,6 +7,11 @@ LOCAL_C_INCLUDES +=\
     external/libpng\
     external/zlib
 
+ifeq ($(call is-vendor-board-platform,QCOM),true)
+  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+  LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+endif
+
 LOCAL_MODULE := libminui
 
 # This used to compare against values in double-quotes (which are just
@@ -35,6 +40,11 @@ LOCAL_SRC_FILES := graphics.c events.c resources.c
 LOCAL_C_INCLUDES +=\
     external/libpng\
     external/zlib
+
+ifeq ($(call is-vendor-board-platform,QCOM),true)
+  LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+  LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+endif
 
 LOCAL_MODULE := libminui
 
