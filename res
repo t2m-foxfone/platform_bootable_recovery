@@ -1,0 +1,1 @@
+../../librecovery/res
