@@ -28,8 +28,6 @@
 
 #include <linux/fb.h>
 #include <linux/kd.h>
-#include <linux/msm_mdp.h>
-#include <linux/msm_ion.h>
 
 #include <pixelflinger/pixelflinger.h>
 
@@ -48,22 +46,12 @@
 #endif
 
 #define NUM_BUFFERS 2
-#define MDP_V4_0 400
-#define ALIGN(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
 typedef struct {
     GGLSurface* texture;
     unsigned cwidth;
     unsigned cheight;
 } GRFont;
-
-typedef struct {
-    unsigned char *mem_buf;
-    int size;
-    int ion_fd;
-    int mem_fd;
-    struct ion_handle_data handle_data;
-} memInfo;
 
 static GRFont *gr_font = 0;
 static GGLContext *gr_context = 0;
@@ -82,204 +70,14 @@ static int gr_vt_fd = -1;
 static struct fb_var_screeninfo vi;
 static struct fb_fix_screeninfo fi;
 
-static int overlay_id = MSMFB_NEW_REQUEST;
 static bool has_overlay = false;
-static memInfo mem_info;
 
-static int map_mdp_pixel_format()
-{
-#if defined(RECOVERY_BGRA)
-    return MDP_BGRA_8888;
-#elif defined(RECOVERY_RGBX)
-    return MDP_RGBA_8888;
-#else
-    return MDP_RGB_565;
-#endif
-}
-
-static int free_ion_mem(void) {
-    int ret = 0;
-
-    if (mem_info.mem_buf)
-        munmap(mem_info.mem_buf, mem_info.size);
-
-    if (mem_info.ion_fd >= 0) {
-        ret = ioctl(mem_info.ion_fd, ION_IOC_FREE, &mem_info.handle_data);
-        if (ret < 0)
-            perror("free_mem failed ");
-    }
-
-    if (mem_info.mem_fd >= 0)
-        close(mem_info.mem_fd);
-    if (mem_info.ion_fd >= 0)
-        close(mem_info.ion_fd);
-
-    memset(&mem_info, 0, sizeof(mem_info));
-    mem_info.mem_fd = -1;
-    mem_info.ion_fd = -1;
-    return 0;
-}
-
-static int alloc_ion_mem(unsigned int size)
-{
-    int result;
-    struct ion_fd_data fd_data;
-    struct ion_allocation_data ionAllocData;
-
-    mem_info.ion_fd = open("/dev/ion", O_RDWR|O_DSYNC);
-    if (mem_info.ion_fd < 0) {
-        perror("ERROR: Can't open ion ");
-        return -errno;
-    }
-
-    ionAllocData.flags = 0;
-    ionAllocData.len = size;
-    ionAllocData.align = sysconf(_SC_PAGESIZE);
-    ionAllocData.heap_mask =
-            ION_HEAP(ION_IOMMU_HEAP_ID) |
-            ION_HEAP(ION_SYSTEM_CONTIG_HEAP_ID);
-
-    result = ioctl(mem_info.ion_fd, ION_IOC_ALLOC,  &ionAllocData);
-    if(result){
-        perror("ION_IOC_ALLOC Failed ");
-        close(mem_info.ion_fd);
-        return result;
-    }
-
-    fd_data.handle = ionAllocData.handle;
-    mem_info.handle_data.handle = ionAllocData.handle;
-    result = ioctl(mem_info.ion_fd, ION_IOC_MAP, &fd_data);
-    if (result) {
-        perror("ION_IOC_MAP Failed ");
-        free_ion_mem();
-        return result;
-    }
-    mem_info.mem_buf = (unsigned char *)mmap(NULL, size, PROT_READ |
-                PROT_WRITE, MAP_SHARED, fd_data.fd, 0);
-    mem_info.mem_fd = fd_data.fd;
-
-    if (!mem_info.mem_buf) {
-        perror("ERROR: mem_buf MAP_FAILED ");
-        free_ion_mem();
-        return -ENOMEM;
-    }
-
-    return 0;
-}
-
-static int target_has_overlay(char *version)
-{
-    int ret;
-    int mdp_version;
-
-    if (strlen(version) >= 8) {
-        if(!strncmp(version, "msmfb", strlen("msmfb"))) {
-            char str_ver[4];
-            memcpy(str_ver, version + strlen("msmfb"), 3);
-            str_ver[3] = '\0';
-            mdp_version = atoi(str_ver);
-            if (mdp_version >= MDP_V4_0)
-                return 1;
-            return 0;
-        } else if (!strncmp(version, "mdssfb", strlen("mdssfb"))) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static int allocate_overlay(int fd)
-{
-    struct mdp_overlay overlay;
-    int ret = 0;
-
-    memset(&overlay, 0 , sizeof (struct mdp_overlay));
-
-    /* Fill Overlay Data */
-
-    overlay.src.width  = ALIGN(gr_framebuffer[0].width, 32);
-    overlay.src.height = gr_framebuffer[0].height;
-    overlay.src.format = map_mdp_pixel_format();
-    overlay.src_rect.w = gr_framebuffer[0].width;
-    overlay.src_rect.h = gr_framebuffer[0].height;
-    overlay.dst_rect.w = gr_framebuffer[0].width;
-    overlay.dst_rect.h = gr_framebuffer[0].height;
-    overlay.alpha = 0xFF;
-    overlay.transp_mask = MDP_TRANSP_NOP;
-    overlay.id = MSMFB_NEW_REQUEST;
-    ret = ioctl(fd, MSMFB_OVERLAY_SET, &overlay);
-    if (ret < 0) {
-        perror("Overlay Set Failed");
-        return ret;
-    }
-
-    overlay_id = overlay.id;
-    return 0;
-}
-
-static int free_overlay(int fd)
-{
-    int ret = 0;
-    struct mdp_display_commit ext_commit;
-
-    if (overlay_id != MSMFB_NEW_REQUEST) {
-        ret = ioctl(fd, MSMFB_OVERLAY_UNSET, &overlay_id);
-        if (ret) {
-            perror("Overlay Unset Failed");
-            overlay_id = MSMFB_NEW_REQUEST;
-            return ret;
-        }
-
-        memset(&ext_commit, 0, sizeof(struct mdp_display_commit));
-        ext_commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
-        ext_commit.wait_for_finish = 1;
-        ret = ioctl(fd, MSMFB_DISPLAY_COMMIT, &ext_commit);
-        if (ret < 0) {
-            perror("ERROR: Clear MSMFB_DISPLAY_COMMIT failed!");
-            overlay_id = MSMFB_NEW_REQUEST;
-            return ret;
-        }
-
-        overlay_id = MSMFB_NEW_REQUEST;
-    }
-    return 0;
-}
-
-static int overlay_display_frame(int fd, int memory_id)
-{
-    int ret = 0;
-    struct msmfb_overlay_data ovdata;
-    struct mdp_display_commit ext_commit;
-
-    if (overlay_id == MSMFB_NEW_REQUEST) {
-        perror("display_frame failed, no overlay\n");
-        return -1;
-    }
-
-    memset(&ovdata, 0, sizeof(struct msmfb_overlay_data));
-
-    ovdata.id = overlay_id;
-    ovdata.data.flags = 0;
-    ovdata.data.offset = 0;
-    ovdata.data.memory_id = memory_id;
-    ret = ioctl(fd, MSMFB_OVERLAY_PLAY, &ovdata);
-    if (ret < 0) {
-        perror("overlay_display_frame failed, overlay play Failed\n");
-        return ret;
-    }
-
-    memset(&ext_commit, 0, sizeof(struct mdp_display_commit));
-    ext_commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
-    ext_commit.wait_for_finish = 1;
-    ret = ioctl(fd, MSMFB_DISPLAY_COMMIT, &ext_commit);
-    if (ret < 0) {
-        perror("overlay_display_frame failed, overlay commit Failed\n!");
-        return ret;
-    }
-
-    return 0;
-}
+bool target_has_overlay(char *version);
+int free_ion_mem(void);
+int alloc_ion_mem(unsigned int size);
+int allocate_overlay(int fd, GGLSurface gr_fb[]);
+int free_overlay(int fd);
+int overlay_display_frame(int fd, GGLubyte* data, size_t size);
 
 static int get_framebuffer(GGLSurface *fb)
 {
@@ -349,6 +147,7 @@ static int get_framebuffer(GGLSurface *fb)
             return -1;
         }
     }
+
     overscan_offset_x = vi.xres * overscan_percent / 100;
     overscan_offset_y = vi.yres * overscan_percent / 100;
 
@@ -405,7 +204,8 @@ static void set_active_framebuffer(unsigned n)
 
 void gr_flip(void)
 {
-    if (!has_overlay) {
+    if (-EINVAL == overlay_display_frame(gr_fb_fd, gr_mem_surface.data,
+                                         (fi.line_length * vi.yres))) {
         GGLContext *gl = gr_context;
 
         /* swap front and back buffers */
@@ -419,10 +219,6 @@ void gr_flip(void)
 
         /* inform the display driver */
         set_active_framebuffer(gr_active_fb);
-    } else {
-        memcpy(mem_info.mem_buf, gr_mem_surface.data,
-                fi.line_length * vi.yres);
-        overlay_display_frame(gr_fb_fd, mem_info.mem_fd);
     }
 }
 
@@ -589,7 +385,6 @@ int gr_init(void)
 {
     gglInit(&gr_context);
     GGLContext *gl = gr_context;
-    int result = 0;
 
     gr_init_font();
     gr_vt_fd = open("/dev/tty0", O_RDWR | O_SYNC);
@@ -627,24 +422,16 @@ int gr_init(void)
     gr_fb_blank(true);
     gr_fb_blank(false);
 
-    if (has_overlay) {
-        result = alloc_ion_mem(fi.line_length * vi.yres);
-        if (result) {
-            perror("fail to allocate buffer\n");
-            return result;
-        }
-        allocate_overlay(gr_fb_fd);
-    }
+    if (!alloc_ion_mem(fi.line_length * vi.yres))
+        allocate_overlay(gr_fb_fd, gr_framebuffer);
 
     return 0;
 }
 
 void gr_exit(void)
 {
-    if (has_overlay) {
-        free_overlay(gr_fb_fd);
-        free_ion_mem();
-    }
+    free_overlay(gr_fb_fd);
+    free_ion_mem();
 
     close(gr_fb_fd);
     gr_fb_fd = -1;
@@ -674,10 +461,15 @@ gr_pixel *gr_fb_data(void)
 void gr_fb_blank(bool blank)
 {
     int ret;
+    if (blank)
+        free_overlay(gr_fb_fd);
 
     ret = ioctl(gr_fb_fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
     if (ret < 0)
         perror("ioctl(): blank");
+
+    if (!blank)
+        allocate_overlay(gr_fb_fd, gr_framebuffer);
 }
 
 void gr_get_memory_surface(gr_surface surface)

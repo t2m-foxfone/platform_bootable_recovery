@@ -1,7 +1,7 @@
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := graphics.c events.c resources.c
+LOCAL_SRC_FILES := graphics.c graphics_overlay.c events.c resources.c
 
 LOCAL_C_INCLUDES +=\
     external/libpng\
@@ -10,6 +10,10 @@ LOCAL_C_INCLUDES +=\
 ifeq ($(call is-vendor-board-platform,QCOM),true)
   LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
   LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+endif
+
+ifeq ($(TARGET_USES_QCOM_BSP), true)
+    LOCAL_CFLAGS += -DQCOM_BSP
 endif
 
 LOCAL_MODULE := libminui
@@ -35,7 +39,7 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := graphics.c events.c resources.c
+LOCAL_SRC_FILES := graphics.c graphics_overlay.c events.c resources.c
 
 LOCAL_C_INCLUDES +=\
     external/libpng\
@@ -44,6 +48,10 @@ LOCAL_C_INCLUDES +=\
 ifeq ($(call is-vendor-board-platform,QCOM),true)
   LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
   LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+endif
+
+ifeq ($(TARGET_USES_QCOM_BSP), true)
+    LOCAL_CFLAGS += -DQCOM_BSP
 endif
 
 LOCAL_MODULE := libminui
