@@ -204,8 +204,16 @@ static void set_active_framebuffer(unsigned n)
 
 void gr_flip(void)
 {
-    if (-EINVAL == overlay_display_frame(gr_fb_fd, gr_mem_surface.data,
-                                         (fi.line_length * vi.yres))) {
+    if (has_overlay) {
+        // Allocate overly. It'll exit early if overlay already
+        // allocated and allocate it if not already allocated.
+        allocate_overlay(gr_fb_fd, gr_framebuffer);
+        if (overlay_display_frame(gr_fb_fd,gr_mem_surface.data,
+                                     (fi.line_length * vi.yres)) < 0) {
+            // Free overlay in failure case
+            free_overlay(gr_fb_fd);
+        }
+    } else {
         GGLContext *gl = gr_context;
 
         /* swap front and back buffers */
@@ -422,16 +430,22 @@ int gr_init(void)
     gr_fb_blank(true);
     gr_fb_blank(false);
 
-    if (!alloc_ion_mem(fi.line_length * vi.yres))
-        allocate_overlay(gr_fb_fd, gr_framebuffer);
+    if (has_overlay) {
+        if (alloc_ion_mem(fi.line_length * vi.yres) ||
+            allocate_overlay(gr_fb_fd, gr_framebuffer)) {
+                free_ion_mem();
+        }
+    }
 
     return 0;
 }
 
 void gr_exit(void)
 {
-    free_overlay(gr_fb_fd);
-    free_ion_mem();
+    if (has_overlay) {
+        free_overlay(gr_fb_fd);
+        free_ion_mem();
+    }
 
     close(gr_fb_fd);
     gr_fb_fd = -1;
@@ -461,15 +475,17 @@ gr_pixel *gr_fb_data(void)
 void gr_fb_blank(bool blank)
 {
     int ret;
-    if (blank)
+    if (has_overlay && blank) {
         free_overlay(gr_fb_fd);
+    }
 
     ret = ioctl(gr_fb_fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
     if (ret < 0)
         perror("ioctl(): blank");
 
-    if (!blank)
+    if (has_overlay && !blank) {
         allocate_overlay(gr_fb_fd, gr_framebuffer);
+    }
 }
 
 void gr_get_memory_surface(gr_surface surface)
