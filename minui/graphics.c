@@ -46,6 +46,7 @@
 #endif
 
 #define NUM_BUFFERS 2
+#define ALIGN(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
 typedef struct {
     GGLSurface* texture;
@@ -96,41 +97,6 @@ static int get_framebuffer(GGLSurface *fb)
         return -1;
     }
 
-    vi.bits_per_pixel = PIXEL_SIZE * 8;
-    if (PIXEL_FORMAT == GGL_PIXEL_FORMAT_BGRA_8888) {
-      vi.red.offset     = 8;
-      vi.red.length     = 8;
-      vi.green.offset   = 16;
-      vi.green.length   = 8;
-      vi.blue.offset    = 24;
-      vi.blue.length    = 8;
-      vi.transp.offset  = 0;
-      vi.transp.length  = 8;
-    } else if (PIXEL_FORMAT == GGL_PIXEL_FORMAT_RGBX_8888) {
-      vi.red.offset     = 24;
-      vi.red.length     = 8;
-      vi.green.offset   = 16;
-      vi.green.length   = 8;
-      vi.blue.offset    = 8;
-      vi.blue.length    = 8;
-      vi.transp.offset  = 0;
-      vi.transp.length  = 8;
-    } else { /* RGB565*/
-      vi.red.offset     = 11;
-      vi.red.length     = 5;
-      vi.green.offset   = 5;
-      vi.green.length   = 6;
-      vi.blue.offset    = 0;
-      vi.blue.length    = 5;
-      vi.transp.offset  = 0;
-      vi.transp.length  = 0;
-    }
-    if (ioctl(fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
-        perror("failed to put fb0 info");
-        close(fd);
-        return -1;
-    }
-
     if (ioctl(fd, FBIOGET_FSCREENINFO, &fi) < 0) {
         perror("failed to get fb0 info");
         close(fd);
@@ -140,12 +106,54 @@ static int get_framebuffer(GGLSurface *fb)
     has_overlay = target_has_overlay(fi.id);
 
     if (!has_overlay) {
-        bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        if (bits == MAP_FAILED) {
-            perror("failed to mmap framebuffer");
-            close(fd);
-            return -1;
-        }
+       vi.bits_per_pixel = PIXEL_SIZE * 8;
+       if (PIXEL_FORMAT == GGL_PIXEL_FORMAT_BGRA_8888) {
+         vi.red.offset     = 8;
+         vi.red.length     = 8;
+         vi.green.offset   = 16;
+         vi.green.length   = 8;
+         vi.blue.offset    = 24;
+         vi.blue.length    = 8;
+         vi.transp.offset  = 0;
+         vi.transp.length  = 8;
+       } else if (PIXEL_FORMAT == GGL_PIXEL_FORMAT_RGBX_8888) {
+         vi.red.offset     = 24;
+         vi.red.length     = 8;
+         vi.green.offset   = 16;
+         vi.green.length   = 8;
+         vi.blue.offset    = 8;
+         vi.blue.length    = 8;
+         vi.transp.offset  = 0;
+         vi.transp.length  = 8;
+       } else { /* RGB565*/
+         vi.red.offset     = 11;
+         vi.red.length     = 5;
+         vi.green.offset   = 5;
+         vi.green.length   = 6;
+         vi.blue.offset    = 0;
+         vi.blue.length    = 5;
+         vi.transp.offset  = 0;
+         vi.transp.length  = 0;
+       }
+       if (ioctl(fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
+           perror("failed to put fb0 info");
+           close(fd);
+           return -1;
+       }
+       if (ioctl(fd, FBIOGET_FSCREENINFO, &fi) < 0) {
+           perror("failed to get fb0 info");
+           close(fd);
+           return -1;
+       }
+
+       bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+       if (bits == MAP_FAILED) {
+           perror("failed to mmap framebuffer");
+           close(fd);
+           return -1;
+       }
+    } else {
+         fi.line_length = ALIGN(vi.xres, 32) * PIXEL_SIZE;
     }
 
     overscan_offset_x = vi.xres * overscan_percent / 100;
