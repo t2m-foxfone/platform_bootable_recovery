@@ -76,10 +76,10 @@ ScreenRecoveryUI::ScreenRecoveryUI() :
     // that overrides Init() to set these values appropriately and
     // then call the superclass Init().
     animation_fps(20),
-    indeterminate_frames(6),
-    installing_frames(7),
-    install_overlay_offset_x(13),
-    install_overlay_offset_y(190),
+    indeterminate_frames(8),
+    installing_frames(23),
+    install_overlay_offset_x(138),
+    install_overlay_offset_y(220),
     overlay_offset_x(-1),
     overlay_offset_y(-1) {
 
