@@ -126,7 +126,13 @@ int res_create_surface(const char* name, gr_surface* pSurface) {
     surface->stride = width; /* Yes, pixels, not bytes */
     surface->data = pData;
     surface->format = (channels == 3) ? GGL_PIXEL_FORMAT_RGBX_8888 :
-        ((color_type == PNG_COLOR_TYPE_PALETTE ? GGL_PIXEL_FORMAT_RGBA_8888 : GGL_PIXEL_FORMAT_L_8));
+    /*Modified by baijan,2014-01-13 begin*/
+    /*color type is  PNG_COLOR_TYPE_RGB_ALPHA ,format should be GGL_PIXEL_FORMAT_RGBA_8888.
+     *Or there will not display the picture
+     */
+       (((color_type == PNG_COLOR_TYPE_PALETTE ||color_type ==PNG_COLOR_TYPE_RGB_ALPHA ) ? GGL_PIXEL_FORMAT_RGBA_8888 : GGL_PIXEL_FORMAT_L_8));
+        // ((color_type == PNG_COLOR_TYPE_PALETTE ? GGL_PIXEL_FORMAT_RGBA_8888 : GGL_PIXEL_FORMAT_L_8));
+    /*Modified by baijan,2014-01-13 end*/
 
     int alpha = 0;
     if (color_type == PNG_COLOR_TYPE_PALETTE) {

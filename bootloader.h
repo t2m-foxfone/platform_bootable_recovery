@@ -44,13 +44,26 @@ struct bootloader_message {
     char status[32];
     char recovery[1024];
 };
-
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FOTA
+struct fota_cookie {
+    char value[4];
+};
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
 /* Read and write the bootloader command from the "misc" partition.
  * These return zero on success.
  */
 int get_bootloader_message(struct bootloader_message *out);
 int set_bootloader_message(const struct bootloader_message *in);
 
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+int set_fota_cookie_mmc(void);
+int reset_fota_cookie_mmc(void);
+int read_fota_cookie_mmc(struct fota_cookie *out);
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
 #ifdef __cplusplus
 }
 #endif

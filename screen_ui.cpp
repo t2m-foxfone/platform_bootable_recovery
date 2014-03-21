@@ -76,10 +76,12 @@ ScreenRecoveryUI::ScreenRecoveryUI() :
     // that overrides Init() to set these values appropriately and
     // then call the superclass Init().
     animation_fps(20),
-    indeterminate_frames(8),
-    installing_frames(23),
-    install_overlay_offset_x(138),
-    install_overlay_offset_y(220),
+    /*Modified by baijian for FOTA UI begin 2014-01-13 begin*/
+    indeterminate_frames(8),/*8 pictures*/
+    installing_frames(23),/*23 pictures*/
+    install_overlay_offset_x(138),/*install icon x position*/
+    install_overlay_offset_y(220),/*install icon x position*/
+    /*Modified by baijian for FOTA UI begin 2014-01-13 end*/
     overlay_offset_x(-1),
     overlay_offset_y(-1) {
 
@@ -113,19 +115,22 @@ void ScreenRecoveryUI::draw_background_locked(Icon icon)
     gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 
     if (icon) {
+    /*Modified by baijian 2014-01-13 FOTA update UI begin*/
+        /*There no text icon so delete the icon and the size of the background now is the same as
+         the screen,so adjust the x,y position*/
         gr_surface surface = backgroundIcon[icon];
-        gr_surface text_surface = backgroundText[icon];
+        //gr_surface text_surface = backgroundText[icon];
 
         int iconWidth = gr_get_width(surface);
         int iconHeight = gr_get_height(surface);
-        int textWidth = gr_get_width(text_surface);
-        int textHeight = gr_get_height(text_surface);
+        //int textWidth = gr_get_width(text_surface);
+        //int textHeight = gr_get_height(text_surface);
 
         int iconX = (gr_fb_width() - iconWidth) / 2;
-        int iconY = (gr_fb_height() - (iconHeight+textHeight+40)) / 2;
-
-        int textX = (gr_fb_width() - textWidth) / 2;
-        int textY = ((gr_fb_height() - (iconHeight+textHeight+40)) / 2) + iconHeight + 40;
+        //int iconY = (gr_fb_height() - (iconHeight+textHeight+40)) / 2;
+        int iconY = (gr_fb_height() - iconHeight) / 2;
+        //int textX = (gr_fb_width() - textWidth) / 2;
+        //int textY = ((gr_fb_height() - (iconHeight+textHeight+40)) / 2) + iconHeight + 40;
 
         gr_blit(surface, 0, 0, iconWidth, iconHeight, iconX, iconY);
         if (icon == INSTALLING_UPDATE || icon == ERASING) {
@@ -133,7 +138,8 @@ void ScreenRecoveryUI::draw_background_locked(Icon icon)
         }
 
         gr_color(255, 255, 255, 255);
-        gr_texticon(textX, textY, text_surface);
+        //gr_texticon(textX, textY, text_surface);
+    /*Modified by baijian 2014-01-13 FOTA update UI end*/
     }
 }
 
@@ -362,12 +368,12 @@ void ScreenRecoveryUI::Init()
 
     LoadBitmap("progress_empty", &progressBarEmpty);
     LoadBitmap("progress_fill", &progressBarFill);
-
-    LoadLocalizedBitmap("installing_text", &backgroundText[INSTALLING_UPDATE]);
-    LoadLocalizedBitmap("erasing_text", &backgroundText[ERASING]);
-    LoadLocalizedBitmap("no_command_text", &backgroundText[NO_COMMAND]);
-    LoadLocalizedBitmap("error_text", &backgroundText[ERROR]);
-
+    /*Deleted by baijian 2014-01-13 There no text icons FOTA begin*/
+    //LoadLocalizedBitmap("installing_text", &backgroundText[INSTALLING_UPDATE]);
+    //LoadLocalizedBitmap("erasing_text", &backgroundText[ERASING]);
+    //LoadLocalizedBitmap("no_command_text", &backgroundText[NO_COMMAND]);
+    //LoadLocalizedBitmap("error_text", &backgroundText[ERROR]);
+    /*Deleted by baijian 2014-01-13 There no text icons FOTA begin*/
     int i;
 
     progressBarIndeterminate = (gr_surface*)malloc(indeterminate_frames *
@@ -428,11 +434,15 @@ void ScreenRecoveryUI::SetBackground(Icon icon)
     // Adjust the offset to account for the positioning of the
     // base image on the screen.
     if (backgroundIcon[icon] != NULL) {
+    /*Modified by baijian 2014-01-13 adjust the backgroud icon position FOTA begin*/
         gr_surface bg = backgroundIcon[icon];
-        gr_surface text = backgroundText[icon];
+        //gr_surface text = backgroundText[icon];
         overlay_offset_x = install_overlay_offset_x + (gr_fb_width() - gr_get_width(bg)) / 2;
+        /*overlay_offset_y = install_overlay_offset_y +
+            (gr_fb_height() - (gr_get_height(bg) + gr_get_height(text) + 40)) / 2;*/
         overlay_offset_y = install_overlay_offset_y +
-            (gr_fb_height() - (gr_get_height(bg) + gr_get_height(text) + 40)) / 2;
+            (gr_fb_height() - gr_get_height(bg) ) / 2;
+    /*Modified by baijian 2014-01-13 adjust the backgroud icon position FOTA end*/
     }
 
     currentIcon = icon;

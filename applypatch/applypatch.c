@@ -30,6 +30,12 @@
 #include "mtdutils/mtdutils.h"
 #include "edify/expr.h"
 
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FULL_UPDATE
+#include "trace_partition.h"
+#include "nv_tracability.h"
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
 static int LoadPartitionContents(const char* filename, FileContents* file);
 static ssize_t FileSink(unsigned char* data, ssize_t len, void* token);
 static int GenerateTarget(FileContents* source_file,
@@ -1046,3 +1052,97 @@ static int GenerateTarget(FileContents* source_file,
     // Success!
     return 0;
 }
+
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+
+#ifdef FEATURE_TCT_FULL_UPDATE
+#define FOTA_PARTITION  "/dev/block/platform/msm_sdcc.1/by-name/fota"
+#define FOTA_RECOVERY_COOKIE  0x64645343
+int set_fota_flag(bool flag) {
+  //If flag is true, set FOTA_RECOVERY_COOKIE, or set 0
+  const int cookie = FOTA_RECOVERY_COOKIE;
+  int value;
+
+  if (true == flag) {
+     value = cookie;
+  } else if(false == flag) {
+    value = 0;
+  }
+
+  int fd = open(FOTA_PARTITION, O_WRONLY);
+  if (fd < 0) {
+     printf("open %s failed\n", FOTA_PARTITION);
+     return -1;
+  }
+  if (write(fd, &value, sizeof(cookie)) < 0 ){
+     printf("write %s failed:%d\n", FOTA_PARTITION, sizeof(cookie));
+  }
+  close(fd);
+  return 0;
+}
+
+#define CU_REF_LEN (20)
+#define CU_REF_OFFSET   (166)
+#define TOTAL_SIZE  (sizeof(rtrf_header) + sizeof(tracability_region_struct_t))
+static inline int is_visible(unsigned char c)
+{
+    //visible characters, //man ascii
+    if( (c > 0x7E) || (c < 0x21) ){
+        return -1;
+    }
+
+    return 0;
+}
+
+static int read_trace_partition(tracability_region_struct_t* tra_region) {
+    rtrf_header *p_header = NULL;
+    int fd = 0;
+    char buf[2048];
+    //the buf contains header and region.
+    tracability_region_struct_t *p_re_mmc =
+        (tracability_region_struct_t *)( buf + sizeof(rtrf_header));
+
+    //read patti
+    if( (fd = open(MMCBLKP, O_RDONLY)) < 0 ) {
+        printf("open %s failed\n", MMCBLKP);
+        return -1;
+    }
+
+    memset(buf, 0, sizeof(buf));
+    if( (read(fd, buf, TOTAL_SIZE)) < 0){
+        printf("read %s failed : %d\n", MMCBLKP, errno);
+        close(fd);
+        return -1;
+    }
+    close(fd);
+
+    memcpy(tra_region, p_re_mmc, sizeof(tracability_region_struct_t));
+    return 0;
+}
+
+void get_cu_from_trace(char* sys_cu) {
+   tracability_region_struct_t tra_region;
+   if (read_trace_partition(&tra_region) < 0) {
+        printf("read trace failed\n");
+        sprintf(sys_cu, "Unknown");
+   }
+
+   unsigned char *p = &(tra_region.data[CU_REF_OFFSET]);
+   int i;
+   //memset(sys_cu, 0, sizeof(sys_cu));
+   for(i=0; i<CU_REF_LEN; i++) {
+     if(is_visible(p[i]) < 0) {//invisible
+         break;
+     }else {
+         sys_cu[i] = (char)p[i];
+     }
+   }
+   sys_cu[i] = '\0';
+   printf("sys_cu =%s\n",sys_cu);
+
+   if(sys_cu[0] == 0x00){
+       sprintf(sys_cu, "Unknown");
+  }
+}
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/

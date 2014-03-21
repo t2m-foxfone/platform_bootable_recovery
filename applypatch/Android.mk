@@ -21,6 +21,11 @@ LOCAL_MODULE_TAGS := eng
 LOCAL_C_INCLUDES += external/bzip2 external/zlib bootable/recovery
 LOCAL_STATIC_LIBRARIES += libmtdutils libmincrypt libbz libz
 
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin
+ifeq ($(TARGET_USES_TCT_FOTA), true)
+LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
+endif
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -30,6 +35,11 @@ LOCAL_MODULE := applypatch
 LOCAL_C_INCLUDES += bootable/recovery
 LOCAL_STATIC_LIBRARIES += libapplypatch libmtdutils libmincrypt libbz libminelf
 LOCAL_SHARED_LIBRARIES += libz libcutils libstdc++ libc
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin
+ifeq ($(TARGET_USES_TCT_FOTA), true)
+LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
+endif
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end
 
 include $(BUILD_EXECUTABLE)
 
@@ -42,6 +52,12 @@ LOCAL_MODULE_TAGS := eng
 LOCAL_C_INCLUDES += bootable/recovery
 LOCAL_STATIC_LIBRARIES += libapplypatch libmtdutils libmincrypt libbz libminelf
 LOCAL_STATIC_LIBRARIES += libz libcutils libstdc++ libc
+
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin
+ifeq ($(TARGET_USES_TCT_FOTA), true)
+LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
+endif
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end
 
 include $(BUILD_EXECUTABLE)
 

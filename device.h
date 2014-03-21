@@ -64,9 +64,15 @@ class Device {
     //   - do nothing (kNoAction)
     //   - invoke a specific action (a menu position: any non-negative number)
     virtual int HandleMenuKey(int key, int visible) = 0;
-
+    /*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+    #if defined(FEATURE_TCT_FOTA)
+    enum BuiltinAction { NO_ACTION, REBOOT, APPLY_EXT, APPLY_CACHE,
+                         APPLY_ADB_SIDELOAD, WIPE_DATA, WIPE_CACHE, APPLY_UPDATE };
+    #else
     enum BuiltinAction { NO_ACTION, REBOOT, APPLY_EXT, APPLY_CACHE,
                          APPLY_ADB_SIDELOAD, WIPE_DATA, WIPE_CACHE };
+    #endif
+    /*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
 
     // Perform a recovery action selected from the menu.
     // 'menu_position' will be the item number of the selected menu

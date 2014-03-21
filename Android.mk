@@ -60,6 +60,17 @@ ifeq ($(TARGET_USERIMAGES_USE_EXT4), true)
     LOCAL_STATIC_LIBRARIES += libext4_utils_static libz
 endif
 
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin
+ifeq ($(TARGET_USES_TCT_FOTA), true)
+LOCAL_CFLAGS += -DFEATURE_TCT_FOTA
+endif
+
+ifeq ($(TARGET_USES_TCT_FOTA), true)
+LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
+endif
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end
+
+
 # This binary is in the recovery ramdisk, which is otherwise a copy of root.
 # It gets copied there in config/Makefile.  LOCAL_MODULE_TAGS suppresses
 # a (redundant) copy of the binary in /system/bin for user builds.
