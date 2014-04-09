@@ -80,6 +80,11 @@ static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
 static const char *TEMPORARY_INSTALL_FILE = "/tmp/last_install";
 static const char *SIDELOAD_TEMP_DIR = "/tmp/sideload";
 
+/* czb@tcl.com factory reset, do not erase data version info. start*/
+static const char *USERDATA_VERSION_INFO="/data/userdata.ver";
+static char userdata_info_buf[256] = {0};
+/* czb@tcl.com factory reset, do not erase data version info. end*/
+
 RecoveryUI* ui = NULL;
 char* locale = NULL;
 char recovery_version[PROPERTY_VALUE_MAX+1];
@@ -169,6 +174,35 @@ check_and_fclose(FILE *fp, const char *name) {
     if (ferror(fp)) LOGE("Error in %s\n(%s)\n", name, strerror(errno));
     fclose(fp);
 }
+
+/* czb@tcl.com factory reset, do not erase data version info. start*/
+static void save_userdata_ver_info(){
+    FILE *info = fopen_path(USERDATA_VERSION_INFO,  "r");
+    if (info == NULL) {
+		LOGE("Can't open %s\n", USERDATA_VERSION_INFO);
+    } else {
+		fgets(userdata_info_buf, 256, info);
+        fclose(info);
+	}
+}
+
+static void restore_userdata_ver_info(){
+	FILE *info = fopen_path(USERDATA_VERSION_INFO,  "w");
+	if (info == NULL) {
+		LOGE("Can't open %s\n", USERDATA_VERSION_INFO);
+		return;
+	}
+	if(userdata_info_buf==NULL){
+		LOGE("No information to restore \n");
+	}else{
+		fputs(userdata_info_buf, info);
+		fflush(info);
+	}
+	fclose(info);
+	chmod(USERDATA_VERSION_INFO, 0644);
+}
+/* czb@tcl.com factory reset, do not erase data version info. end*/
+
 
 // command line args come from, in decreasing precedence:
 //   - the actual command line
@@ -828,8 +862,10 @@ wipe_data(int confirm, Device* device) {
 
     ui->Print("\n-- Wiping data...\n");
     device->WipeData();
+	save_userdata_ver_info();//czb@tcl.com save userdata.ver
     erase_volume("/data");
     erase_volume("/cache");
+	restore_userdata_ver_info();//czb@tcl.com restore userdata.ver
     ui->Print("Data wipe complete.\n");
 }
 
@@ -1108,7 +1144,9 @@ main(int argc, char **argv) {
         }
     } else if (wipe_data) {
         if (device->WipeData()) status = INSTALL_ERROR;
+		save_userdata_ver_info();//czb@tcl.com save userdata.ver
         if (erase_volume("/data")) status = INSTALL_ERROR;
+		restore_userdata_ver_info();//czb@tcl.com restore userdata.ver
         if (wipe_cache && erase_volume("/cache")) status = INSTALL_ERROR;
         if (status != INSTALL_SUCCESS) ui->Print("Data wipe failed.\n");
 #ifdef MSM_FIRST_FORMAT
