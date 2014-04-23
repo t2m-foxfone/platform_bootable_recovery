@@ -79,8 +79,8 @@ ScreenRecoveryUI::ScreenRecoveryUI() :
     /*Modified by baijian for FOTA UI begin 2014-01-13 begin*/
     indeterminate_frames(8),/*8 pictures*/
     installing_frames(23),/*23 pictures*/
-    install_overlay_offset_x(200),/*install icon x position*/
-    install_overlay_offset_y(387),/*install icon x position*/
+    install_overlay_offset_x(0),/*install icon x position*/
+    install_overlay_offset_y(0),/*install icon x position*/
     /*Modified by baijian for FOTA UI begin 2014-01-13 end*/
     overlay_offset_x(-1),
     overlay_offset_y(-1) {
@@ -366,6 +366,9 @@ void ScreenRecoveryUI::Init()
     LoadBitmap("icon_error", &backgroundIcon[ERROR]);
     backgroundIcon[NO_COMMAND] = backgroundIcon[ERROR];
 
+    int bg_w = gr_get_width(backgroundIcon[INSTALLING_UPDATE]);
+    int bg_h = gr_get_height(backgroundIcon[INSTALLING_UPDATE]);
+
     LoadBitmap("progress_empty", &progressBarEmpty);
     LoadBitmap("progress_fill", &progressBarFill);
     /*Deleted by baijian 2014-01-13 There no text icons FOTA begin*/
@@ -384,7 +387,8 @@ void ScreenRecoveryUI::Init()
         sprintf(filename, "indeterminate%02d", i+1);
         LoadBitmap(filename, progressBarIndeterminate+i);
     }
-
+    int inst_w = 0;
+    int inst_h = 0;
     if (installing_frames > 0) {
         installationOverlay = (gr_surface*)malloc(installing_frames *
                                                    sizeof(gr_surface));
@@ -395,9 +399,16 @@ void ScreenRecoveryUI::Init()
             sprintf(filename, "icon_installing_overlay%02d", i+1);
             LoadBitmap(filename, installationOverlay+i);
         }
+       inst_w = gr_get_width(installationOverlay[0]);
+       inst_h = gr_get_height(installationOverlay[0]);
     } else {
         installationOverlay = NULL;
     }
+    /**
+    *icon_installing_overlay01 display position
+    */
+    install_overlay_offset_x = (bg_w - inst_w) / 2;
+    install_overlay_offset_y = (bg_h - inst_h) / 2;
 
     pthread_create(&progress_t, NULL, progress_thread, NULL);
 
