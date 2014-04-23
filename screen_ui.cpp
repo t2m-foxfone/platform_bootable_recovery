@@ -79,8 +79,8 @@ ScreenRecoveryUI::ScreenRecoveryUI() :
     /*Modified by baijian for FOTA UI begin 2014-01-13 begin*/
     indeterminate_frames(8),/*8 pictures*/
     installing_frames(23),/*23 pictures*/
-    install_overlay_offset_x(276),/*install icon x position*/
-    install_overlay_offset_y(440),/*install icon x position*/
+    install_overlay_offset_x(200),/*install icon x position*/
+    install_overlay_offset_y(387),/*install icon x position*/
     /*Modified by baijian for FOTA UI begin 2014-01-13 end*/
     overlay_offset_x(-1),
     overlay_offset_y(-1) {
