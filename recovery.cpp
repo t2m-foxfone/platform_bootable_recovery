@@ -1533,7 +1533,7 @@ main(int argc, char **argv) {
         ensure_path_unmounted("/system");
    /*Added by baijian 2014-01-13 before update ensure the cache,system and so on is unmounted end*/
         /*Added by tcl_baijian fixed bug#616327 free cache space 2014-03-19 begin*/
-        erase_volume(CACHE_ROOT);
+        //erase_volume(CACHE_ROOT);/*case is enought, need not to erase*/
         /*Added by tcl_baijian fixed bug#616327 free cache space 2014-03-19 end*/
         status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE);
         if (status == INSTALL_SUCCESS && wipe_cache) {
