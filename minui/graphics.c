@@ -495,8 +495,10 @@ int gr_init(void)
     gl->enable(gl, GGL_BLEND);
     gl->blendFunc(gl, GGL_SRC_ALPHA, GGL_ONE_MINUS_SRC_ALPHA);
 
-    gr_fb_blank(true);
-    gr_fb_blank(false);
+    /*Deleted by weijin 2014-07-09 There is black screen begin*/
+    // gr_fb_blank(true);
+    // gr_fb_blank(false);
+    /*Deleted by weijin 2014-07-09 There is black screen end*/
 
     if (has_overlay) {
         if (alloc_ion_mem(fi.line_length * vi.yres) ||
