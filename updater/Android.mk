@@ -14,8 +14,9 @@ include $(CLEAR_VARS)
 # Build only in eng, so we don't end up with a copy of this in /system
 # on user builds.  (TODO: find a better way to build device binaries
 # needed only for OTA packages.)
-LOCAL_MODULE_TAGS := eng
-
+#Modified tcl baijian make  both in eng and user 2040221 begin
+LOCAL_MODULE_TAGS := optional
+#Modified tcl baijian make  both in eng and user 2040221 end
 LOCAL_SRC_FILES := $(updater_src_files)
 
 ifeq ($(TARGET_USERIMAGES_USE_EXT4), true)
@@ -27,6 +28,11 @@ LOCAL_STATIC_LIBRARIES += \
     libz
 endif
 
+# [FEATURE]-ADD-BEGIN by WRX, 2013/05/24, CR-447694,FULL UPDATE DEV
+ifeq ($(TARGET_USES_TCT_FOTA), true)
+LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
+endif
+# [FEATURE]-ADD-END by WRX
 LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_UPDATER_LIBS) $(TARGET_RECOVERY_UPDATER_EXTRA_LIBS)
 LOCAL_STATIC_LIBRARIES += libapplypatch libedify libmtdutils libminzip libz
 LOCAL_STATIC_LIBRARIES += libmincrypt libbz

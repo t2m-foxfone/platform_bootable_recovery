@@ -25,7 +25,12 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+#include <cutils/properties.h>
+#include <fcntl.h>
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
 static int get_bootloader_message_mtd(struct bootloader_message *out, const Volume* v);
 static int set_bootloader_message_mtd(const struct bootloader_message *in, const Volume* v);
 static int get_bootloader_message_block(struct bootloader_message *out, const Volume* v);
@@ -138,6 +143,104 @@ static int set_bootloader_message_mtd(const struct bootloader_message *in,
     return 0;
 }
 
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+//Write FOTA cookie for MMC device
+int set_fota_cookie_mmc(void)
+{
+    int count = 0;
+    Volume* v = volume_for_path("/fota");
+     if (v == NULL) {
+         LOGE("Cannot load volume /fota\n");
+         return -1;
+    }
+    wait_for_device(v->blk_device);
+
+    int fd = open(v->blk_device, O_RDWR|O_SYNC);
+    if (fd < 0) {
+        LOGE("Can't open %s\n(%s)\n", v->blk_device, strerror(errno));
+        return -1;
+     }
+
+    char data[512];
+    memset(data, 0x0, sizeof(data));
+    data[0] = 0x43;
+    data[1] = 0x53;
+    data[2] = 0x64;
+    data[3] = 0x64;
+
+    count = write(fd,(char *)data,512);
+    if (count <= 0) {
+        LOGE("Failed writing %s\n(%s)\n", v->blk_device, strerror(errno));
+        return -1;
+    }
+    if (close(fd) != 0) {
+        LOGE("Failed closing %s\n(%s)\n", v->blk_device, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+int reset_fota_cookie_mmc(void)
+{
+    int count = 0;
+    Volume* v = volume_for_path("/fota");
+     if (v == NULL) {
+         LOGE("Cannot load volume /fota\n");
+         return -1;
+    }
+    wait_for_device(v->blk_device);
+
+    int fd = open(v->blk_device, O_RDWR|O_SYNC);
+    if (fd < 0) {
+        LOGE("Can't open %s\n(%s)\n", v->blk_device, strerror(errno));
+        return -1;
+     }
+
+    char data[512];
+    memset(data, 0x0, sizeof(data));
+
+    count = write(fd,(char *)data,512);
+    if (count <= 0) {
+        LOGE("Failed writing %s\n(%s)\n", v->blk_device, strerror(errno));
+        return -1;
+    }
+    if (close(fd) != 0) {
+        LOGE("Failed closing %s\n(%s)\n", v->blk_device, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+int read_fota_cookie_mmc(struct fota_cookie *out)
+{
+    Volume* v = volume_for_path("/fota");
+    if (v == NULL) {
+      LOGE("Cannot load volume /fota!\n");
+      return -1;
+    }
+
+    wait_for_device(v->blk_device);
+    int fd = open(v->blk_device, O_RDWR|O_SYNC);
+    if (fd < 0) {
+      LOGE("Can't open %s\n(%s)\n", v->blk_device, strerror(errno));
+      return -1;
+    }
+    char data[512];
+    int count = read(fd, &data, 512);
+    if (count <= 0) {
+      LOGE("Failed reading %s\n(%s)\n", v->blk_device, strerror(errno));
+      return -1;
+    }
+    if (close(fd) != 0) {
+      LOGE("Failed closing %s\n(%s)\n", v->blk_device, strerror(errno));
+      return -1;
+    }
+    memcpy(out, &data, sizeof(out));
+    return 0;
+}
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end  */
 
 // ------------------------------------
 // for misc partitions on block devices

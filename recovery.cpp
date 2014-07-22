@@ -49,6 +49,10 @@ extern "C" {
 #include "minadbd/adb.h"
 }
 
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+#include "private/android_filesystem_config.h"
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
+
 #define RESERVED_MEMORY_SIZE (sysconf(_SC_PAGESIZE) * 1024 * 5)
 #define GET_AVPHYS_MEM() ((long long)sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE))
 
@@ -79,6 +83,17 @@ static const char *SDCARD_ROOT = "/sdcard";
 static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
 static const char *TEMPORARY_INSTALL_FILE = "/tmp/last_install";
 static const char *SIDELOAD_TEMP_DIR = "/tmp/sideload";
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+static const char *BACKUP_LOG_FILE = "/data/recovery.log";
+/*Modify by baijian 2014-01-13 Firefox FOTA result path begin*/
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+static const char *JRD_FOTA_RESULT_FILE = "/data/fota/result.txt";
+//static const char *FOTA_STATUS_FILE = "/cache/recovery/fota.status";
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
+/*Modify by baijian 2014-01-13 Firefox FOTA result path end*/
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
 
 /* czb@tcl.com factory reset, do not erase data version info. start*/
 static const char *USERDATA_VERSION_INFO="/data/userdata.ver";
@@ -360,6 +375,14 @@ copy_logs() {
     chown(LOG_FILE, 1000, 1000);   // system user
     chmod(LAST_LOG_FILE, 0640);
     chmod(LAST_INSTALL_FILE, 0644);
+    /*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+    //chmod(FOTA_STATUS_FILE, 0644);//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18
+    //keeps logs to system for investigation after factory reset
+    copy_log_file(TEMPORARY_LOG_FILE, BACKUP_LOG_FILE, false); // save log to system
+    chmod(BACKUP_LOG_FILE, 0644);
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
     sync();
 }
 
@@ -660,7 +683,102 @@ get_menu_selection(const char* const * headers, const char* const * items,
     ui->EndMenu();
     return chosen_item;
 }
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+static int select_update(Device* device, const char *path, char *new_path) {
+    ensure_path_mounted(path);
+    static const char** title_headers = NULL;
 
+    if (title_headers == NULL) {
+        const char* headers[] = { "Packages stored in root folder,",
+                                  "choose one to install",
+                                  "",
+                                  NULL };
+        title_headers = prepend_title(headers);
+    }
+
+    DIR* d;
+    struct dirent* de;
+    int i = 0;
+    char** updates = (char**)malloc(11 * sizeof(char*));//not need so many options, 10 is enough
+    updates[i++] = strdup("Cancel");
+
+    d = opendir(path);
+    if (d != NULL) {
+        while ((de = readdir(d)) != NULL &&  i < 10) {
+            if (de->d_type == DT_REG && strstr(de->d_name, "JSU")
+                  && strstr(de->d_name,".zip"))//"JSU" + ".zip"
+            updates[i++] = strdup(de->d_name);
+        }
+
+        closedir(d);
+    }
+    updates[i] = NULL;//termination
+
+    int chosen_item = get_menu_selection(title_headers, updates, 1, 0, device);
+
+    if(chosen_item == 0){
+        free(updates);
+        return -1;
+    }else{
+        strlcpy(new_path, SDCARD_ROOT, PATH_MAX);
+        strlcat(new_path, "/", PATH_MAX);
+        strlcat(new_path, updates[chosen_item], PATH_MAX);
+        free(updates);
+        return 0;
+    }
+}
+
+static struct fota_cookie fota_status;
+static int select_fota_status_operation(Device* device) {
+  int chosen_item=-1;
+    static const char** title_headers = NULL;
+
+    if (title_headers == NULL) {
+        const char* headers[] = { "Select the update.zip ",
+                                    NULL };
+        title_headers = prepend_title(headers);
+    }
+
+    const char* items[] = { " 1 - read fota cookie",
+                            " 2 - set fota cookie",
+                            " 3 - reset fota cookie",
+                            " 4 - cancel",
+                            NULL };
+
+    chosen_item = get_menu_selection(title_headers, items, 1, 0, device);
+    if(chosen_item==0){
+        if(read_fota_cookie_mmc(&fota_status))
+        {
+          ui->Print("read fota cookie fail");
+        }else
+        {
+          ui->Print("read fota cookie = 0x%x%x%x%x", fota_status.value[0],fota_status.value[1],fota_status.value[2],fota_status.value[3]);
+        }
+     }else if(chosen_item==1){
+        if(set_fota_cookie_mmc())
+        {
+          ui->Print("set fota cookie fail");
+        }else
+        {
+          ui->Print("set fota cookie success");
+        }
+    }else if(chosen_item==2){
+        if(reset_fota_cookie_mmc())
+        {
+          ui->Print("reset fota cookie fail");
+        }else
+        {
+          ui->Print("reset fota cookie success");
+        }
+    }else{
+          return 0;
+    }
+
+    return 0;
+}
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
 static int compare_string(const void* a, const void* b) {
     return strcmp(*(const char**)a, *(const char**)b);
 }
@@ -883,6 +1001,12 @@ prompt_and_wait(Device* device, int status) {
 
             case INSTALL_ERROR:
             case INSTALL_CORRUPT:
+            //FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+            case INSTALL_NO_SDCARD:
+            case INSTALL_NO_UPDATE_PACKAGE:
+            case INSTALL_NO_KEY:
+            case INSTALL_SIGNATURE_ERROR:
+            //FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
                 ui->SetBackground(RecoveryUI::ERROR);
                 break;
         }
@@ -971,6 +1095,29 @@ prompt_and_wait(Device* device, int status) {
                     }
                 }
                 break;
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+            case Device::APPLY_UPDATE:
+                  char* new_path = (char*)malloc(PATH_MAX);
+                  memset(new_path, 0, sizeof(new_path));
+                  if(!select_update(device, SDCARD_ROOT,new_path)) {
+                     set_sdcard_update_bootloader_message();
+                     status = install_package(new_path, &wipe_cache, TEMPORARY_INSTALL_FILE);
+                     if (status >= 0) {
+                        if (status != INSTALL_SUCCESS) {
+                        ui->SetBackground(RecoveryUI::ERROR);
+                        ui->Print("Installation aborted.\n");
+                        } else if (!ui->IsTextVisible()) {
+                          return;  // reboot if logs aren't visible
+                        } else {
+                          ui->Print("\nInstall from SD card complete.\n");
+                        }
+                     }
+                  }
+                  free(new_path);
+                break;
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
         }
     }
 }
@@ -998,6 +1145,276 @@ load_locale_from_cache() {
         check_and_fclose(fp, LOCALE_FILE);
     }
 }
+//[FEATURE]-ADD-BEGIN by Xiaoting.He, 2013/03/13, FR-400298,FOTA porting
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+#ifdef FEATURE_TCT_FOTA
+//#define FOTA_STATUS_FAILED "FAILED"
+//#define FOTA_STATUS_SUCCESS "SUCCESS"
+
+//#define fota_set_status_success() fota_set_status(FOTA_STATUS_SUCCESS)
+//#define fota_set_status_failed() fota_set_status(FOTA_STATUS_FAILED)
+
+static void fota_reset_status(void) {
+    //if(unlink(FOTA_STATUS_FILE)){
+    if(unlink(JRD_FOTA_RESULT_FILE)){
+        LOGE("erasing fota.status failed errno=%d\n",errno);
+    }
+}
+
+/*static void fota_set_status(char* status) {
+    FILE *fp;
+    int expected = strlen("[APPS_UPDATE_STATUS]=")+strlen(status)+strlen("\n");
+
+    fp=fopen_path(FOTA_STATUS_FILE, "w");
+    if(fp==NULL) {
+        LOGE("can't open fota.status for writing errno=%d\n",errno);
+        return;
+    }
+
+    if (fprintf(fp,"[APPS_UPDATE_STATUS]=%s\n",status)!=expected) {
+        LOGE("error while writing fota.status errno=%d\n",errno);
+        fclose(fp);
+        return;
+    }
+
+    fclose(fp);
+}*/
+// JRD
+#define INS_ABORT "Installation aborted"
+#define SCR_ABORT "script aborted"
+#define ASSERT_FAIL "assert failed"
+
+#define ERR_UNDEF "Undefine"
+
+char *err_mesg[] = {
+    "ro.build.fingerprint",
+    "ro.product.device",
+    "ro.build.date.utc",
+    "apply_patch_check",
+    "apply_patch_space",
+    "sha1_check",
+    "run_program",
+    "package_extract_file",
+    NULL
+};
+
+#include "minzip/SysUtil.h"
+#include "minzip/Zip.h"
+
+#define SCRIPT_NAME "META-INF/com/google/android/updater-script"
+
+static char *fota_incr_comment = "# ---- start making changes here ----";
+
+enum
+{
+    FOTA_UN,
+    FOTA_INCR,
+    FOTA_FULL,
+};
+
+static char *parse_err(char *buf)
+{
+    char *ret = NULL;
+
+    ret = strstr(buf, SCR_ABORT);
+
+    if (ret == NULL) {
+        ret = ERR_UNDEF;
+    } else {
+        int i;
+        for (i = 0; err_mesg[i] != NULL; i++) {
+            if (strstr(ret, err_mesg[i])) {
+                ret = err_mesg[i];
+                break;
+            }
+        }
+
+        if (err_mesg[i] == NULL)
+            ret = ERR_UNDEF;
+    }
+
+    return ret;
+}
+
+static char *get_update_error()
+{
+    char *ret = "NULL";
+    char *buf = NULL;
+    int len;
+
+    FILE *tmplog = fopen(TEMPORARY_LOG_FILE, "r");
+    if (tmplog != NULL) {
+        fseek(tmplog, 0, SEEK_END);
+        len = ftell(tmplog);
+        buf =(char *) malloc(len);
+        if (buf != NULL) {
+            fseek(tmplog, 0, SEEK_SET);
+            len = fread(buf, 1, len, tmplog);
+            ret = parse_err(buf);
+            free(buf);
+        }
+
+        fclose(tmplog);
+    }
+
+    return ret;
+}
+
+static int kind_of_update = FOTA_UN;
+void get_update_kind(const char *update_package)
+{
+    int k = FOTA_UN;
+    ZipArchive za;
+    int err;
+
+    err = mzOpenZipArchive(update_package, &za);
+    if (err != 0) {
+        fprintf(stderr, "Can't open %s\n(%s)\n", update_package, err != -1 ? strerror(err) : "bad");
+        return;
+    }
+
+    const ZipEntry* script_entry = mzFindZipEntry(&za, SCRIPT_NAME);
+    if (script_entry == NULL) {
+        fprintf(stderr, "Can't find %s\n", SCRIPT_NAME);
+        return;
+    }
+
+    char* script = (char *)malloc(script_entry->uncompLen+1);
+    if (!mzReadZipEntry(&za, script_entry, script, script_entry->uncompLen)) {
+        fprintf(stderr, "Can't read %s\n", SCRIPT_NAME);
+        return;
+    }
+    script[script_entry->uncompLen] = '\0';
+
+    char* p;
+    for (p = script; *p != '\0'; p++) {
+        if (*p == '#') {
+            if (strcmp(p, fota_incr_comment) >= 0) {
+                k = FOTA_INCR;
+                break;
+            }
+        }
+    }
+
+    // not find incremental ota comment, it's full ota
+    if (*p == '\0')
+        k = FOTA_FULL;
+
+    free(script);
+    mzCloseZipArchive(&za);
+
+    kind_of_update = k;
+}
+
+static void write_file(const char *file_name, int reason, char *result)
+{
+    char  dir_name[256];
+
+    ensure_path_mounted("/data");
+
+    strcpy(dir_name, file_name);
+    char *p = strrchr(dir_name, '/');
+    *p = 0;
+
+    fprintf(stdout, "dir_name = %s\n", dir_name);
+    mode_t proc_mask = umask(0);
+
+    if (opendir(dir_name) == NULL)  {
+        fprintf(stdout, "dir_name = '%s' does not exist, create it.\n", dir_name);
+        if (mkdir(dir_name, 0775))  {
+            fprintf(stdout, "can not create '%s' : %s\n", dir_name, strerror(errno));
+            umask(proc_mask);
+            return;
+        }
+        chown(dir_name, AID_SYSTEM, AID_SYSTEM);
+    }
+
+    int result_fd = open(file_name, O_RDWR | O_CREAT | O_TRUNC, 0666);
+    fchown(result_fd, AID_SYSTEM, AID_SYSTEM);
+
+    if (result_fd < 0) {
+        fprintf(stdout, "cannot open '%s' for output : %s\n", file_name, strerror(errno));
+        umask(proc_mask);
+        return;
+    }
+
+    //LOG_INFO("[%s] %s %d\n", __func__, file_name, result);
+
+    char buf[256];
+    strcpy(buf, "package install result:");
+    strcat(buf, result);
+
+    if (reason == INSTALL_ERROR) {
+        // strcat(buf, "package install error: ");
+        strcat(buf, get_update_error());
+        strcat(buf, "\n");
+    }
+
+    if (kind_of_update == FOTA_FULL) {
+        strcat(buf, "package install kind:full package\n");
+    }
+    write(result_fd, buf, strlen(buf));
+    close(result_fd);
+    umask(proc_mask);
+}
+
+static char *install_result = NULL;
+static void set_install_result(char *s)
+{
+    install_result = s;
+}
+
+static void write_result(int reason)
+{
+    switch (reason) {
+    case INSTALL_NO_SDCARD:
+        set_install_result("Update.zip is not correct:No SD-Card.\n");
+        break;
+    case INSTALL_NO_UPDATE_PACKAGE:
+        set_install_result("Update.zip is not correct:Can not find update.zip.\n");
+        break;
+    case INSTALL_NO_KEY:
+        set_install_result("Update.zip is not correct:Failed to load keys\n");
+        break;
+    case INSTALL_SIGNATURE_ERROR:
+        set_install_result("Update.zip is not correct:Signature verification failed\n");
+        break;
+    case INSTALL_CORRUPT:
+        set_install_result("Update.zip is not correct:The update.zip is corrupted\n");
+        break;
+    //case INSTALL_FILE_SYSTEM_ERROR:
+        //set_install_result("Update.zip is not correct:Can't create/copy file\n");
+        //break;
+    case INSTALL_ERROR:
+        set_install_result("Update.zip is not correct:");
+        break;
+    }
+
+    if (reason == INSTALL_SUCCESS) {
+        set_install_result("INSTALL SUCCESS\n");
+    }
+
+    fprintf(stdout, "package install result:%s", install_result);
+
+    write_file(JRD_FOTA_RESULT_FILE, reason, install_result);
+}
+// JRD end
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
+//[FEATURE]-ADD-BEGIN by WRX, 2013/05/27, CR-447694, FULL UPDATE DEV
+static int full_update(char const *name) {
+    const char* key = "JSU";
+
+    if(strstr(name, key)) {
+       return 1;
+    }else {
+       return 0;
+    }
+
+}
+//[FEATURE]-ADD-END by WRX
+
+#endif
+//[FEATURE]-ADD-END by Xiaoting.He, 2013/03/13, FR-400298,FOTA porting
 
 static RecoveryUI* gCurrentUI = NULL;
 
@@ -1114,6 +1531,34 @@ main(int argc, char **argv) {
                    update_package, modified_path);
             update_package = modified_path;
         }
+         /*
+         *Modified by baijian 2014-02-12
+         *extern sdcard location is /storage/sdcard1 in normal model,
+         *but in recovery model,it should be locate in the /sdcard.
+         *begin
+         */
+        else if (strncmp(update_package, "/storage/sdcard1", 16) == 0) {
+            int len = strlen(update_package) + 20;
+            char* modified_path = (char*)malloc(len);
+            memset(modified_path, 0, len);
+
+            if(! ensure_path_mounted("/sdcard")) {
+                strlcpy(modified_path, "/sdcard", len);
+                ensure_path_unmounted("/sdcard");
+            }
+
+            strlcat(modified_path, update_package+16, len-16+1);
+            fprintf(stdout, "(replacing path \"%s\" with \"%s\")\n",
+                   update_package, modified_path);
+            update_package = modified_path;
+            ensure_path_mounted("/data");
+        }
+        /*
+         *Modified by baijian 2014-02-12
+         *extern sdcard location is /storage/sdcard1 in normal model,
+         *but in recovery model,it should be located in the /sdcard
+         *end
+         */
     }
     printf("\n");
 
@@ -1124,6 +1569,18 @@ main(int argc, char **argv) {
     int status = INSTALL_SUCCESS;
 
     if (update_package != NULL) {
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+    fota_reset_status();
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
+   /*Added by baijian 2014-01-13 before update ensure the cache,system and so on is unmounted begin*/
+        ensure_path_unmounted(CACHE_ROOT);
+        ensure_path_unmounted("/system");
+   /*Added by baijian 2014-01-13 before update ensure the cache,system and so on is unmounted end*/
+        /*Added by tcl_baijian fixed bug#616327 free cache space 2014-03-19 begin*/
+        //erase_volume(CACHE_ROOT);/*case is enought, need not to erase*/
+        /*Added by tcl_baijian fixed bug#616327 free cache space 2014-03-19 end*/
         status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE);
         if (status == INSTALL_SUCCESS && wipe_cache) {
             if (erase_volume("/cache")) {
@@ -1141,7 +1598,33 @@ main(int argc, char **argv) {
             if (strstr(buffer, ":userdebug/") || strstr(buffer, ":eng/")) {
                 ui->ShowText(true);
             }
+       }
+/*[FEATURE]-MOD-BEGIN by TCTNB.XLJ, 2012/12/13, PR-314522,FOTA porting*/
+#ifdef FEATURE_TCT_FOTA
+        if (status != INSTALL_SUCCESS)
+        {
+            ui->Print("Installation aborted.\n");
+            //fota_set_status_failed();
+        }else
+        {
+            ui->Print("Installation success.\n");
+            //fota_set_status_success();
         }
+        //FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+        //JRD need upload the error code to GOTU server
+        get_update_kind(update_package);
+        write_result(status);
+        //FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
+//JRD end
+//[FEATURE]-ADD-BEGIN by WRX, 2013/05/27, CR-447694, FULL UPDATE DEV
+//Different from FOTA, full update doesn't need fota.statu file
+    if (full_update(update_package)) {
+            fota_reset_status();
+    }
+//[FEATURE]-ADD-END by WRX
+#endif
+
+
     } else if (wipe_data) {
         if (device->WipeData()) status = INSTALL_ERROR;
 		save_userdata_ver_info();//czb@tcl.com save userdata.ver
@@ -1173,6 +1656,10 @@ main(int argc, char **argv) {
     }
 
     // Otherwise, get ready to boot the main system...
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+FINISHRECOVERY:
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
+
     finish_recovery(send_intent);
     ui->Print("Rebooting...\n");
     property_set(ANDROID_RB_PROPERTY, "reboot,");

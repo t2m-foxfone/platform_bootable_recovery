@@ -85,5 +85,10 @@ int ApplyImagePatch(const unsigned char* old_data, ssize_t old_size,
 
 // freecache.c
 int MakeFreeSpaceOnCache(size_t bytes_needed);
-
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FULL_UPDATE
+int set_fota_flag(bool flag);
+void get_cu_from_trace(char* sys_cu);
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
 #endif

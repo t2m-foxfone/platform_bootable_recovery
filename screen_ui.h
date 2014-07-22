@@ -68,7 +68,9 @@ class ScreenRecoveryUI : public RecoveryUI {
 
     pthread_mutex_t updateMutex;
     gr_surface backgroundIcon[5];
-    gr_surface backgroundText[5];
+    /*Deleted by baijian 2014-01-13 no text icon FOTA begin*/
+    //gr_surface backgroundText[5];
+    /*Deleted by baijian 2014-01-13 no text icon FOTA end*/
     gr_surface *installationOverlay;
     gr_surface *progressBarIndeterminate;
     gr_surface progressBarEmpty;

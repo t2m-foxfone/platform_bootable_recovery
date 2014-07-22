@@ -20,8 +20,19 @@
 #include "device.h"
 #include "screen_ui.h"
 
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+#define KEY_POWER_YES 116
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
 static const char* HEADERS[] = { "Volume up/down to move highlight;",
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FOTA
+                                 "power button to select.",
+#else
                                  "enter button to select.",
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
                                  "",
                                  NULL };
 
@@ -29,13 +40,23 @@ static const char* ITEMS[] =  {"reboot system now",
                                "apply update from ADB",
                                "wipe data/factory reset",
                                "wipe cache partition",
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FOTA
                                "apply update from sdcard",
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
                                NULL };
 
 class DefaultUI : public ScreenRecoveryUI {
   public:
     virtual KeyAction CheckKey(int key) {
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+        if (IsKeyPressed(KEY_POWER_YES) && key == KEY_VOLUMEUP) {
+#else
         if (key == KEY_HOME) {
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
             return TOGGLE;
         }
         return ENQUEUE;
@@ -76,7 +97,11 @@ class DefaultDevice : public Device {
           case 1: return APPLY_ADB_SIDELOAD;
           case 2: return WIPE_DATA;
           case 3: return WIPE_CACHE;
-          case 4: return APPLY_EXT;
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+          case 4: return APPLY_UPDATE;
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end */
           default: return NO_ACTION;
         }
     }

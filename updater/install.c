@@ -193,6 +193,107 @@ done:
     return StringValue(result);
 }
 
+//add by zcl for fsg erase
+
+#define PATH_SYS_LINKED             "/sys/block/mmcblk0/"
+#define RB_MAX_PATH                 1024
+#define SECTOR_SIZE                 0x200 //512
+
+
+int get_Partition_info(char* ptname, unsigned long* byte_size) {
+    char path_byname[RB_MAX_PATH] = {'\0'};
+    char linkedpath[RB_MAX_PATH] = {'\0'};
+    char sys_path_byte_size[RB_MAX_PATH] = PATH_SYS_LINKED;
+    char pbBuffer_size[40] = {0};
+    int ret = -1;
+
+    strcpy(path_byname,ptname);
+    //the linkedpath will be (/dev/block/mmcblk0p*)
+    ret = readlink(path_byname, linkedpath, RB_MAX_PATH);
+    if (ret == -1) {
+        fprintf(stderr, "get_Partition_info error readlink %s errno = %d\n", sys_path_byte_size, errno);
+        goto GET_SIZE_DONE;
+    }
+    strcat(sys_path_byte_size, linkedpath+11);
+    strcat(sys_path_byte_size, "/size");
+
+    //open /sys/block/mmcblk0/mmcblk0p*/size
+    int fd = open(sys_path_byte_size, O_RDONLY);
+    if ( -1 == fd) {
+        fprintf(stderr, "get_Partition_info error open %s errno = %d\n", sys_path_byte_size, errno);
+        goto GET_SIZE_DONE;
+    }
+
+    if (-1 == read(fd, pbBuffer_size, 30)) {
+        fprintf(stderr, "get_Partition_info error read %s errno = %d\n", sys_path_byte_size, errno);
+        goto GET_SIZE_DONE;
+    }
+
+    *byte_size = strtoul(pbBuffer_size,NULL,10) * SECTOR_SIZE;
+
+    fprintf(stdout, "get_Partition_info partition : %s byte_size : %x\n",
+                ptname,  *byte_size);
+    ret = 0;
+
+GET_SIZE_DONE:
+    if (fd != -1)
+        close(fd);
+    return ret;
+
+}
+
+int mmc_raw_erase (char* partition, unsigned long byte_size ) {
+    char data[SECTOR_SIZE];
+    memset(data, 0, sizeof(data));
+    int fd;
+    int ret = -1;
+    unsigned long soFar = 0;
+
+    fprintf(stdout, "mmc_raw_erase partition : %s  byte_size : %x\n",
+                partition, byte_size);
+
+    fd = open (partition, O_WRONLY);
+    if (-1 == fd){
+        fprintf(stderr, " mmc_raw_erase error open %s errno = %d\n", partition, errno);
+        goto ERROR;
+    }
+
+    while(soFar < byte_size){
+        int rest_size = 0;
+        rest_size = byte_size-soFar;
+
+        if(rest_size > SECTOR_SIZE) {
+
+            if ((write(fd, data, SECTOR_SIZE)) == SECTOR_SIZE){
+               soFar += SECTOR_SIZE;
+            }else{
+                fprintf(stderr, "error write %s errno = %d\n", partition, errno);
+                goto ERROR;
+            }
+        } else {
+            if ((write(fd, data, rest_size)) == rest_size){
+               soFar += rest_size;
+            }else{
+                fprintf(stderr, "error2 write %s errno = %d\n", partition, errno);
+                goto ERROR;
+            }
+        }
+    }
+
+    fprintf(stdout, "mmc_raw_erase done!\n");
+
+    fsync(fd);
+    ret = 0;
+
+ERROR:
+    if (fd != -1)
+        close(fd);
+    return ret;
+}
+
+//end by zcl for fsg erase
+
+
 
 // format(fs_type, partition_type, location, fs_size, mount_point)
 //
@@ -273,6 +374,24 @@ Value* FormatFn(const char* name, State* state, int argc, Expr* argv[]) {
         }
         result = location;
 #endif
+//add by zcl for fsg erase
+    } else if (strcmp(fs_type, "emmc") == 0) {
+        unsigned long mmc_size = 0;
+        int status = get_Partition_info(location, &mmc_size);
+        if (status != 0) {
+            fprintf(stderr, "%s: get_Partition_info failed (%d) on %s",
+                    name, status, location);
+            result = strdup("");
+            goto done;
+        }
+        status = mmc_raw_erase(location, mmc_size);
+        if (status != 0) {
+            fprintf(stderr, "%s: mmc_raw_erase failed (%d) on %s",
+                    name, status, location);
+            result = strdup("");
+            goto done;
+        }
+        result = location;
     } else {
         printf("%s: unsupported fs_type \"%s\" partition_type \"%s\"",
                 name, fs_type, partition_type);
@@ -323,6 +442,13 @@ done:
 Value* DeleteFn(const char* name, State* state, int argc, Expr* argv[]) {
     char** paths = malloc(argc * sizeof(char*));
     int i;
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+
+#ifdef FEATURE_TCT_FOTA
+    struct stat file_stat;
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
+
     for (i = 0; i < argc; ++i) {
         paths[i] = Evaluate(state, argv[i]);
         if (paths[i] == NULL) {
@@ -339,8 +465,31 @@ Value* DeleteFn(const char* name, State* state, int argc, Expr* argv[]) {
 
     int success = 0;
     for (i = 0; i < argc; ++i) {
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+        printf("deleting %s...",paths[i]);
+        if(stat(paths[i],&file_stat)) {
+            /* the file doesn't exist anymore, it might have been deleted already
+            if we execute the script for a second time, count it as a success */
+            ++success;
+            printf("file not found(ok)\n");
+        }else if (S_ISDIR(file_stat.st_mode)) {
+            /* ajayet : 'recursive' is not used for dirs, so check dynamically */
+            if(dirUnlinkHierarchy(paths[i]) == 0 ) {
+                ++success;
+                printf("ok\n");
+            }
+        }else if ((recursive ? dirUnlinkHierarchy(paths[i]) : unlink(paths[i])) == 0) {
+            ++success;
+            printf("ok\n");
+        }else {
+            printf("failed\n");
+        }
+#else
         if ((recursive ? dirUnlinkHierarchy(paths[i]) : unlink(paths[i])) == 0)
             ++success;
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
         free(paths[i]);
     }
     free(paths);
@@ -1209,6 +1358,11 @@ Value* ApplyPatchFn(const char* name, State* state, int argc, Expr* argv[]) {
 // apply_patch_check(file, [sha1_1, ...])
 Value* ApplyPatchCheckFn(const char* name, State* state,
                          int argc, Expr* argv[]) {
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+    int result = 0;
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
     if (argc < 1) {
         return ErrorAbort(state, "%s(): expected at least 1 arg, got %d",
                           name, argc);
@@ -1219,17 +1373,39 @@ Value* ApplyPatchCheckFn(const char* name, State* state,
         return NULL;
     }
 
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin */
+#ifdef FEATURE_TCT_FOTA
+    /*
+     * Some of the symbolic links to shared libraries are created at runtime
+     * based on hw being used as these are created at runtime sha1 would be
+     * different compared to the one generated by updater-script. As we anyway
+     * update the actual file the sym link points to, we can skip ahead sym links.
+     */
+    if (!CheckSymLink(filename)) {
+        result = 0;
+        goto ret;
+    }
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
     int patchcount = argc-1;
     char** sha1s = ReadVarArgs(state, argc-1, argv+1);
-
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin*/
+#ifdef FEATURE_TCT_FOTA
+    result = applypatch_check(filename, patchcount, sha1s);
+#else
     int result = applypatch_check(filename, patchcount, sha1s);
-
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
     int i;
     for (i = 0; i < patchcount; ++i) {
         free(sha1s[i]);
     }
     free(sha1s);
-
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin*/
+#ifdef FEATURE_TCT_FOTA
+ret:
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
     return StringValue(strdup(result == 0 ? "t" : ""));
 }
 
@@ -1419,6 +1595,84 @@ Value* ReadFileFn(const char* name, State* state, int argc, Expr* argv[]) {
     return v;
 }
 
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FULL_UPDATE
+#define CU_REF_LEN  (20)
+//Adding a cu compare rule:
+//DIABLO-[ABC] equals to DIABLO-A, DIABLO-B or DIABLO-C
+static int compare(char* s1, char* s2) {
+    int flag = 0;
+
+    while(*s1 != '\0' && *s2 != '\0' && *s1 == *s2) {
+       s1++;
+       s2++;
+    }
+
+    if(*s1 == '\0' && *s2 == '\0') {
+       flag = 1;
+    } else if(*s1 != '\0' && *s2 != '\0') {
+          if(*s2 == '[') {
+             while(*s2 != '\0' && *s2 != *s1) s2++;
+             while(*s2 != '\0' && *s2 !=  ']') s2++;
+                  if(*s2 != '\0') {
+                      s1++;
+                      s2++;
+                      while(*s2 != '\0' && *s1 != '\0' && *s2  ==  *s1 ) {
+                           s1++;
+                           s2++;
+                      }
+                      if(*s2 == '\0' && *s1 == '\0') flag = 1;
+                  }
+          }
+    }
+
+    return flag;
+}
+
+Value* CheckCuFn(const char* name, State* state, int argc, Expr* argv[]) {
+   if (argc != 1) {
+        return ErrorAbort(state, "%s() expects 1 arg, got %d", name, argc);
+   }
+   char* script_cu;
+   char system_cu[CU_REF_LEN + 1];
+   memset(system_cu, 0, sizeof(system_cu));
+   if (ReadArgs(state, argv, 1, &script_cu) < 0) return NULL;
+
+   get_cu_from_trace(system_cu);
+   if (!compare(system_cu, script_cu)) {
+        return ErrorAbort(state, "%s() failed, %s didn't match", name, script_cu);
+   }
+
+   return StringValue(strdup("Check cu success!"));
+}
+
+Value* SetFotaFlagFn(const char* name, State* state, int argc, Expr* argv[])
+{
+  char* result = NULL;
+  char* value;
+  char** args = ReadVarArgs(state, argc, argv);
+  if (args == NULL) {
+    return NULL;
+  }
+
+  if (argc != 1) {
+    return ErrorAbort(state, "%s() expects 1 arg, got %d", name, argc);
+  }
+
+  value = args[0];
+  if(0 == strcmp(value, "true")) {
+      set_fota_flag(true);
+  }else if(0 == strcmp(value, "false")) {
+      set_fota_flag(false);
+  }else {
+      ErrorAbort(state, "unsupported value: %s",value);
+  }
+
+  return StringValue(strdup(value));
+}
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
+
 void RegisterInstallFunctions() {
     RegisterFunction("mount", MountFn);
     RegisterFunction("is_mounted", IsMountedFn);
@@ -1466,4 +1720,10 @@ void RegisterInstallFunctions() {
     RegisterFunction("ui_print", UIPrintFn);
 
     RegisterFunction("run_program", RunProgramFn);
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  begin*/
+#ifdef FEATURE_TCT_FULL_UPDATE
+    RegisterFunction("check_cu", CheckCuFn);
+    RegisterFunction("set_fota_flag", SetFotaFlagFn);
+#endif
+/*[FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting  end*/
 }

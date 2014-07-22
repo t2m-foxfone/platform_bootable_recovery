@@ -22,8 +22,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-enum { INSTALL_SUCCESS, INSTALL_ERROR, INSTALL_CORRUPT, INSTALL_NONE };
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+enum { INSTALL_SUCCESS, INSTALL_ERROR, INSTALL_CORRUPT, INSTALL_NONE, INSTALL_NO_SDCARD, INSTALL_NO_UPDATE_PACKAGE, INSTALL_NO_KEY, INSTALL_SIGNATURE_ERROR };
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
 // Install the package specified by root_path.  If INSTALL_SUCCESS is
 // returned and *wipe_cache is true on exit, caller should wipe the
 // cache partition.

@@ -187,16 +187,25 @@ really_install_package(const char *path, int* wipe_cache)
 
     if (ensure_path_mounted(path) != 0) {
         LOGE("Can't mount %s\n", path);
-        return INSTALL_CORRUPT;
+        return INSTALL_NO_SDCARD; //FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18
     }
 
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, begin
+    FILE* f = fopen(path, "rb");
+    if (f != NULL)
+        fclose(f);
+    else {
+        LOGE("failed to open %s (%s)\n", path, strerror(errno));
+        return INSTALL_NO_UPDATE_PACKAGE;
+    }
+//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18, end
     ui->Print("Opening update package...\n");
 
     int numKeys;
     Certificate* loadedKeys = load_keys(PUBLIC_KEYS_FILE, &numKeys);
     if (loadedKeys == NULL) {
         LOGE("Failed to load keys\n");
-        return INSTALL_CORRUPT;
+        return INSTALL_NO_KEY;//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18
     }
     LOGI("%d key(s) loaded from %s\n", numKeys, PUBLIC_KEYS_FILE);
 
@@ -208,7 +217,7 @@ really_install_package(const char *path, int* wipe_cache)
     LOGI("verify_file returned %d\n", err);
     if (err != VERIFY_SUCCESS) {
         LOGE("signature verification failed\n");
-        return INSTALL_CORRUPT;
+        return INSTALL_SIGNATURE_ERROR;//FR-550496, Add by changmei.chen@tcl.com for JrdFota upload error code to GOTU server , 2013-11-18
     }
 
     /* Try to open the package.

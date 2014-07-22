@@ -5,14 +5,23 @@ on early-init
     start healthd
 
 on init
-    export PATH /sbin
+#Added by baijian 2014-01-13 For adb command:FOTA begin
+    export PATH /sbin:/system/bin
+#Added by baijian 2014-01-13 For adb command:FOTA end
     export ANDROID_ROOT /system
     export ANDROID_DATA /data
-    export EXTERNAL_STORAGE /sdcard
-
+    #Fota make interal sdcard dir begin
+    mkdir /storage 0150 system sdcard_r
+    mkdir /storage/sdcard0 0000 system system
+    export EXTERNAL_STORAGE /storage/sdcard0
+    export SECONDARY_STORAGE /sdcard
+    #Fota make interal sdcard dir end
     symlink /system/etc /etc
 
     mkdir /sdcard
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin
+    mkdir /firmware
+# [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end
     mkdir /system
     mkdir /data
     mkdir /cache
@@ -29,7 +38,10 @@ on init
     write /sys/class/android_usb/android0/iProduct ${ro.product.model}
     write /sys/class/android_usb/android0/iSerial ${ro.serialno}
 
-
+#Added by baijian 2014-01-13 For adb shell command begin
+on fs
+    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/system /system ro barrier=1 wait
+#Added by baijian 2014-01-13 For adb shell command end
 on boot
 
     ifup lo
@@ -50,7 +62,7 @@ service healthd /sbin/healthd -n
 service recovery /sbin/recovery
 
 service adbd /sbin/adbd recovery
-    disabled
+    start adbd
     socket adbd stream 660 system system
 
 # Always start adbd on userdebug and eng builds
