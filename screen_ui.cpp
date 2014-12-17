@@ -111,7 +111,8 @@ void ScreenRecoveryUI::draw_install_overlay_locked(int frame) {
 void ScreenRecoveryUI::draw_background_locked(Icon icon)
 {
     pagesIdentical = false;
-    gr_color(0, 0, 0, 255);
+     //gr_color(0, 0, 0, 255); 
+     gr_color(51, 51, 51, 255); //mozilla bug:1079318
     gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 
     if (icon) {
@@ -204,8 +205,9 @@ void ScreenRecoveryUI::draw_progress_locked()
 
 void ScreenRecoveryUI::SetColor(UIElement e) {
     switch (e) {
-        case HEADER:
-            gr_color(247, 0, 6, 255);
+        case HEADER: 
+           // gr_color(247, 0, 6, 255);
+            gr_color(229, 85, 73, 255);//mozilla bug:1079318 #E55525
             break;
         case MENU:
         case MENU_SEL_BG:
@@ -215,7 +217,8 @@ void ScreenRecoveryUI::SetColor(UIElement e) {
             gr_color(255, 255, 255, 255);
             break;
         case LOG:
-            gr_color(249, 194, 0, 255);
+            //gr_color(249, 194, 0, 255);
+            gr_color(255, 205, 2, 255); //mozilla bug:1079318 #FFCD02
             break;
         case TEXT_FILL:
             gr_color(0, 0, 0, 160);
