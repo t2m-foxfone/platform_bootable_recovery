@@ -13,20 +13,30 @@
 # limitations under the License.
 
 LOCAL_PATH := $(call my-dir)
-include $(CLEAR_VARS)
+#Begin[wjb, Modify for foxfone recovery, 20150325]
+#include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := applypatch.c bspatch.c freecache.c imgpatch.c utils.c
-LOCAL_MODULE := libapplypatch
-LOCAL_MODULE_TAGS := eng
-LOCAL_C_INCLUDES += external/bzip2 external/zlib bootable/recovery
-LOCAL_STATIC_LIBRARIES += libmtdutils libmincrypt libbz libz
+#LOCAL_SRC_FILES := applypatch.c bspatch.c freecache.c imgpatch.c utils.c
+#LOCAL_MODULE := libapplypatch
+#LOCAL_MODULE_TAGS := eng
+#LOCAL_C_INCLUDES += external/bzip2 external/zlib bootable/recovery
+#LOCAL_STATIC_LIBRARIES += libmtdutils libmincrypt libbz libz
 
 # [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting begin
-ifeq ($(TARGET_USES_TCT_FOTA), true)
-LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
-endif
+#ifeq ($(TARGET_USES_TCT_FOTA), true)
+#LOCAL_CFLAGS += -DFEATURE_TCT_FULL_UPDATE
+#endif
 # [FEATURE]-ADD by ling.yi@jrdcom.com, 2013/11/08, Bug 550459, FOTA porting end
-include $(BUILD_STATIC_LIBRARY)
+#include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE        := libapplypatch
+LOCAL_MODULE_TAGS   := eng
+LOCAL_MODULE_CLASS  := STATIC_LIBRARIES
+LOCAL_MODULE_SUFFIX := .a
+LOCAL_SRC_FILES     := libapplypatch.a
+include $(BUILD_PREBUILT)
+#End[wjb, 20150325]
 
 include $(CLEAR_VARS)
 
